@@ -3,90 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 미세먼지 경보 현황</title>
+    <title>미세먼지 경보 알림판</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; }
-        .btn-container { text-align: center; margin-bottom: 20px; }
-        button { padding: 10px 20px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
-        button:hover { background-color: #218838; }
+        body { font-family: 'Pretendard', sans-serif; background: #f0f2f5; padding: 20px; }
+        .card { max-width: 900px; margin: auto; background: white; padding: 25px; border-radius: 15px; shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        h1 { color: #1a73e8; text-align: center; }
+        .controls { text-align: center; margin-bottom: 20px; }
+        button { padding: 12px 25px; background: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
-        th { background-color: #f8f9fa; color: #333; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        .alert-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; color: white; }
-        .warning { background-color: #ffc107; color: #000; } /* 주의보 */
-        .danger { background-color: #dc3545; } /* 경보 */
-        #status-msg { text-align: center; margin-top: 20px; color: #666; }
+        th, td { padding: 15px; border-bottom: 1px solid #eee; text-align: center; }
+        th { background: #f8f9fa; }
+        .badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; color: white; }
+        .warning { background: #fbbc04; color: black; }
+        .danger { background: #ea4335; }
+        #loader { display: none; text-align: center; color: #666; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>🚩 미세먼지 경보 현황</h1>
-    <div class="btn-container">
-        <button onclick="fetchDustData()">데이터 불러오기</button>
+<div class="card">
+    <h1>😷 실시간 미세먼지 경보 현황</h1>
+    <div class="controls">
+        <button onclick="fetchDust()">데이터 새로고침</button>
     </div>
-
-    <table id="dust-table" style="display:none;">
+    
+    <div id="loader">데이터를 불러오는 중...</div>
+    
+    <table>
         <thead>
             <tr>
                 <th>지역</th>
                 <th>단계</th>
-                <th>농도(μg/m³)</th>
+                <th>농도</th>
                 <th>발령시간</th>
             </tr>
         </thead>
-        <tbody id="dust-list">
-            </tbody>
+        <tbody id="content">
+            <tr><td colspan="4">데이터가 없습니다. 버튼을 눌러주세요.</td></tr>
+        </tbody>
     </table>
-    <p id="status-msg">버튼을 눌러 실시간 데이터를 확인하세요.</p>
 </div>
 
 <script>
-    async function fetchDustData() {
-        const statusMsg = document.getElementById('status-msg');
-        const table = document.getElementById('dust-table');
-        const list = document.getElementById('dust-list');
-        
-        // 인증키 및 API URL 설정
-        const serviceKey = '17cca3209a4686361868213ba9c4bd566dac91d5afd379016f0529ebc32253b8';
-        const url = `http://apis.data.go.kr/B552584/UlfptcaAlarmInqireSvc/getUlfptcaAlarmInfo?serviceKey=${serviceKey}&returnType=json&numOfRows=10&pageNo=1&year=2024&itemCode=PM10`;
+    async function fetchDust() {
+        const loader = document.getElementById('loader');
+        const content = document.getElementById('content');
+        loader.style.display = 'block';
+        content.innerHTML = '';
 
-        statusMsg.innerText = "데이터를 불러오는 중입니다...";
-        list.innerHTML = "";
+        const API_KEY = "17cca3209a4686361868213ba9c4bd566dac91d5afd379016f0529ebc32253b8";
+        // 연도를 현재 연도(2026)로 동적 설정
+        const year = new Date().getFullYear();
+        const url = `http://apis.data.go.kr/B552584/UlfptcaAlarmInqireSvc/getUlfptcaAlarmInfo?serviceKey=${API_KEY}&returnType=json&numOfRows=50&pageNo=1&year=${year}&itemCode=PM10`;
 
         try {
             const response = await fetch(url);
-            const data = await response.json();
-            const items = data.response.body.items;
+            if (!response.ok) throw new Error('네트워크 응답에 문제가 있습니다.');
+            
+            const result = await response.json();
+            const items = result.response.body.items;
 
-            if (!items || items.length === 0) {
-                statusMsg.innerText = "현재 발령된 미세먼지 경보가 없습니다. (공기가 깨끗합니다! 😊)";
-                table.style.display = "none";
-                return;
+            if (items.length === 0) {
+                content.innerHTML = '<tr><td colspan="4">현재 발령된 경보가 없습니다. 공기가 깨끗합니다! ✨</td></tr>';
+            } else {
+                items.forEach(item => {
+                    const badgeClass = item.issueGbn === '경보' ? 'danger' : 'warning';
+                    content.innerHTML += `
+                        <tr>
+                            <td><strong>${item.districtName}</strong><br><small>${item.moveName}</small></td>
+                            <td><span class="badge ${badgeClass}">${item.issueGbn}</span></td>
+                            <td>${item.issueVal} μg/m³</td>
+                            <td>${item.issueDate}<br>${item.issueTime}</td>
+                        </tr>
+                    `;
+                });
             }
-
-            items.forEach(item => {
-                const badgeClass = item.issueGbn === '경보' ? 'danger' : 'warning';
-                const row = `
-                    <tr>
-                        <td><strong>${item.districtName}</strong><br><small>${item.moveName}</small></td>
-                        <td><span class="alert-badge ${badgeClass}">${item.issueGbn}</span></td>
-                        <td>${item.issueVal}</td>
-                        <td>${item.issueDate}<br>${item.issueTime}</td>
-                    </tr>
-                `;
-                list.innerHTML += row;
-            });
-
-            table.style.display = "table";
-            statusMsg.innerText = "최신 데이터를 불러왔습니다.";
-
         } catch (error) {
             console.error(error);
-            statusMsg.innerText = "데이터를 불러오는 데 실패했습니다. (CORS 에러 혹은 인증키 만료)";
+            content.innerHTML = `<tr><td colspan="4" style="color:red;">오류 발생: API 호출이 차단되었습니다. <br> 
+                1. 주소창의 <b>'주의 요함(HTTP)'</b> 차단을 해제하거나 <br>
+                2. 로컬에서 실행 시 크롬 확장도구(CORS Unblock)를 사용해야 합니다.</td></tr>`;
+        } finally {
+            loader.style.display = 'none';
         }
     }
 </script>
